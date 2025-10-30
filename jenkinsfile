@@ -53,7 +53,7 @@ pipeline {
         
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv(credentialsId: 'nav-sonarcloud-token', installationName: '-sonarqube') {
+                withSonarQubeEnv(credentialsId: 'nav-sonarcloud-token', installationName: 'nav-sq') {
                     sh '''#!/bin/bash
                         set -eux
                         echo "=== SonarQube installation ==="
