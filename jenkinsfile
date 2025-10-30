@@ -119,12 +119,34 @@ pipeline {
                 '''
             }
         }
+
+
  
         stage('Archive Trivy Report') {
             steps {
                 archiveArtifacts artifacts: 'trivy-reports/report.txt', fingerprint: true
             }
         }
+
+        stage('Fetch Secret from Vault') {
+            steps {
+                script {
+                    withVault([vaultSecrets: [
+                        [path: 'secret/app_secret', secretValues: [[envVar: 'APP1', vaultKey: 'app1']
+                        ]]
+                    ]]) {
+ 
+                    sh '''
+                    docker rm -f py-app || true
+                    docker rmi -f flask-vault-app:latest || true
+                    docker build -t flask-vault-app:latest .
+                    docker run -d -p 8005:5000 -e API_KEY=$APP1 --name py-app flask-vault-app:latest
+                    '''
+                    }
+                }
+            }
+        }
+        
         stage('OWASP ZAP Scan') {
             steps {
                 sh '''#!/bin/bash
