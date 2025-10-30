@@ -25,33 +25,28 @@ pipeline {
                 checkout scm
             }
         }
-        stage('GitLeaks Scan') {
+         stage('S3 - GitLeaks Scan') {
             steps {
                 sh '''#!/bin/bash
                     set -eux
-                    # Install gitleaks if not present
                     if ! command -v gitleaks &> /dev/null; then
-                        echo "Installing Gitleaks..."
                         wget https://github.com/zricethezav/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
                         tar -xzf gitleaks_8.18.1_linux_x64.tar.gz
                         chmod +x gitleaks
                         sudo mv gitleaks /usr/local/bin/
                     fi
-                    # Run gitleaks detect even if from non commited codes
 
+                    exit_code=0
+                    if ! gitleaks detect --source . --no-git --verbose --report-path gitleaks-report.json; then
+                        exit_code=$?
+                    fi
 
-                    echo "🔍 Running Gitleaks scan..."
-                    set +e  # temporarily disable fail-fast
-                    gitleaks detect --source python_app --no-git --verbose --report-path gitleaks-report.json 
-                    result=$?  # capture exit status
-                    set -e  # re-enable fail-fast
-
-                if [ "$result" -ne 0 ]; then
-                    echo "❌ Gitleaks found leaks (exit code $result)"
-                    exit 1
-                else
-                    echo "✅ No leaks found."
-                fi
+                    if [ "$exit_code" -ne 0 ]; then
+                        echo "❌ Gitleaks found leaks"
+                        exit 1
+                    else
+                        echo "✅ No leaks found"
+                    fi
                 '''
             }
         }
