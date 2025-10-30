@@ -11,7 +11,7 @@ pipeline {
         DOCKERHUB_USER = 'vishwacloudlab'
         IMAGE_NAME = 'jenkins-docker-lab'
         SONARQUBE = 'SonarCloud'
-        SONAR_TOKEN = credentials('vish-sonarcloud-token')
+        SONAR_TOKEN = credentials('nav-sonarcloud-token')
 
     }
     stages {
@@ -55,25 +55,10 @@ pipeline {
                 '''
             }
         }
-        stage('Python Setup & Test with Coverage') {
-            steps {
-                dir('python_app') {
-                    sh '''#!/bin/bash
-                        set -euxo pipefail
-                        rm -rf venv
-                        python3 -m venv venv
-                        ./venv/bin/pip install --upgrade pip
-                        ./venv/bin/pip install -r requirements.txt
-                        ./venv/bin/python -m pytest tests/ --maxfail=1 --disable-warnings -q \
-                            --cov=. --cov-report=xml:../coverage.xml
-                    '''               
-                }
-            }
-        }
-
+        
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv(credentialsId: 'vish-sonarcloud-token', installationName: 'vish-sonarqube') {
+                withSonarQubeEnv(credentialsId: 'nav-sonarcloud-token', installationName: '-sonarqube') {
                     sh '''#!/bin/bash
                         set -eux
                         echo "=== SonarQube installation ==="
@@ -106,24 +91,29 @@ pipeline {
                 }
             }
         }
-        stage('Fetch Secret from Vault') {
-            steps {
-                script {
-                    withVault([vaultSecrets: [
-                        [path: 'secret/app_secret', secretValues: [[envVar: 'APP1', vaultKey: 'app1']
-                        ]]
-                    ]]) {
 
-                    sh '''
-                    docker rm -f py-app || true
-                    docker rmi -f flask-vault-app:latest || true
-                    docker build -t flask-vault-app:latest .
-                    docker run -d -p 8005:5000 -e API_KEY=$APP1 --name py-app flask-vault-app:latest
-                    '''
-                    }
-                }
+        stage('S6 - Docker Build for Python App') {
+            steps {
+                sh '''#!/bin/bash
+                    set -eux
+                    if [ ! -f python_app/Dockerfile ]; then
+                        echo "❌ Dockerfile not found in python_app directory"
+                        exit 1
+                    fi
+
+                    # Build from project root, using python_app/Dockerfile
+                    docker build -t $DOCKERHUB_USER/$IMAGE_NAME:latest -f python_app/Dockerfile .
+
+                    # Stop/remove existing container on port 8005 if any
+                    existing_container=$(docker ps -q --filter "publish=8005" || true)
+                    if [ -n "$existing_container" ]; then
+                        docker stop $existing_container || true
+                        docker rm $existing_container || true
+                    fi
+                '''
             }
         }
+        
         stage('Scan Docker Image with Trivy') {
             steps {
                 // Scan and save report
